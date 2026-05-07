@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build + typecheck + lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      matrix:
+        node-version: [20.x, 22.x]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build
+
+  unit-tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  live-discovery-probe:
+    name: Probe live MAKO discovery
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    # Confirms the live deployment is up and the SDK's expected endpoints
+    # still match the production response. Does not spend any USDC.
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch /.well-known/x402.json
+        run: |
+          set -e
+          curl -sf -A "mako-verifier-ci/1.0" \
+            https://mako.pollinateresearch.com/.well-known/x402.json \
+            > x402.json
+          test -s x402.json
+          # Confirm all four pillars are still declared
+          grep -q '/api/agent-commerce/verify' x402.json
+          grep -q '/api/pulse/score' x402.json
+          grep -q '/api/pricing/index' x402.json
+          grep -q '/api/reputation/wallet' x402.json
+          echo "All four pillars present in live discovery manifest."
+      - name: Health check
+        run: |
+          curl -sf https://mako.pollinateresearch.com/health \
+            | grep -q '"x402_enabled":true'

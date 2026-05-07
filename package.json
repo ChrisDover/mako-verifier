@@ -1,0 +1,67 @@
+{
+  "name": "@pollinate/mako",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for MAKO — the trust layer for agent commerce on Base. Pre-spend verification, endpoint reliability (Pulse), market-rate pricing intelligence, and per-wallet operator reputation, all callable as paid x402 endpoints.",
+  "keywords": [
+    "x402",
+    "agent-commerce",
+    "ai-agents",
+    "base",
+    "usdc",
+    "eip-3009",
+    "eip-191",
+    "coinbase",
+    "mcp",
+    "web3",
+    "defi",
+    "pulse",
+    "reputation",
+    "erc-8004"
+  ],
+  "license": "MIT",
+  "author": "Chris Dover <chrisdover@gmail.com> (https://pollinateresearch.com)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ChrisDover/mako-verifier.git"
+  },
+  "homepage": "https://mako.pollinateresearch.com",
+  "bugs": {
+    "url": "https://github.com/ChrisDover/mako-verifier/issues"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE",
+    "ARCHITECTURE.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "lint": "eslint 'src/**/*.ts' 'examples/**/*.ts'",
+    "test": "vitest run",
+    "test:smoke": "tsx examples/01-verify.ts && tsx examples/02-pulse-score.ts && tsx examples/03-pricing-index.ts && tsx examples/04-reputation.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "viem": "^2.21.0",
+    "x402": "^2.8.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.0.0",
+    "tsx": "^4.16.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  },
+  "peerDependencies": {
+    "viem": "^2.0.0"
+  }
+}
