@@ -1,22 +1,25 @@
 # MAKO
 
-> The trust layer for agent commerce on Base. Verify before you spend.
+> The trust layer for agent commerce on Base. One call to route x402 spend safely.
 
 [![x402](https://img.shields.io/badge/x402-Base-blue)](https://x402.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Listed on agentic.market](https://img.shields.io/badge/listed-agentic.market-black)](https://agentic.market/?service=mako-pollinateresearch-com)
 [![Live](https://img.shields.io/badge/live-mako.pollinateresearch.com-brightgreen)](https://mako.pollinateresearch.com/.well-known/x402.json)
 
-When a buyer agent is about to spend USDC against another x402 service, MAKO answers four questions before the call:
+When a buyer agent is about to spend USDC against another x402 service, MAKO returns the right answer in one call:
 
-| Pillar | Question | Price | Method | Path |
+| Endpoint | What it does | Price | Method | Path |
 |---|---|---|---|---|
-| **Verifier** | Should this call go through? | $0.25 | POST | `/api/agent-commerce/verify` |
-| **Pulse** | Has this endpoint been behaving? | $0.02 | GET | `/api/pulse/score` |
-| **Pricing Index** | Is this a fair price for this kind of work? | $0.02 | GET | `/api/pricing/index` |
-| **Reputation Score** | Is the operator behind this wallet trustworthy? | $0.03 | GET | `/api/reputation/wallet` |
+| **Route** ⭐ | Single-call composition: best service to invoke + signed receipt | $0.05 | POST | `/api/route` |
+| Verifier | Should this *specific* call go through? | $0.25 | POST | `/api/agent-commerce/verify` |
+| Pulse | Has this endpoint been behaving? | $0.02 | GET | `/api/pulse/score` |
+| Pricing Index | Is this a fair price for this kind of work? | $0.02 | GET | `/api/pricing/index` |
+| Reputation Score | Is the operator behind this wallet trustworthy? | $0.03 | GET | `/api/reputation/wallet` |
 
-Every paid call to the Verifier writes a verification record. Pulse, Pricing Index, and Reputation Score all read from that same ledger — so each pillar gets sharper as the others get used. The flywheel is already turning: the live Pulse scoreboard at [`mako.pollinateresearch.com/pulse`](https://mako.pollinateresearch.com/pulse) is currently scoring 142 services across the agentic.market directory.
+`POST /api/route` is the lead product: a single call that composes Verifier + Pulse + Pricing Index + Reputation Score, applies your constraints, and returns the best x402 service for the task plus an EIP-191 signed receipt. The four underlying pillars remain individually callable for any buyer agent that wants the raw signals.
+
+Every paid call writes to the same ledger. Pulse, Pricing Index, Reputation Score, and Route all read from it — so each surface gets sharper as the others get used. The flywheel is already turning: the live Pulse scoreboard at [`mako.pollinateresearch.com/pulse`](https://mako.pollinateresearch.com/pulse) currently scores 142+ services across the agentic.market directory, and the Route catalog spans 28 services across 13 task buckets.
 
 This repo is the open client SDK and protocol spec. The reference deployment runs on Base mainnet at `mako.pollinateresearch.com` — both this SDK and your own buyer agents call it the same way.
 
@@ -53,26 +56,36 @@ const wallet = createWalletClient({
 
 const mako = new MakoClient({ wallet });
 
-// Pillar 1 — Verifier ($0.25)
-const verdict = await mako.verify({
-  target_url: "https://some-x402-service.example.com",
-  intended_task: "Fetch latest spot price for USDC/ETH",
-  max_price_usdc: 0.10,
-  risk_mode: "strict",
+// Route — single-call recommendation ($0.05)
+const route = await mako.route({
+  task: "crypto-data",
+  execution_mode: "recommend",
+  buyer_wallet: wallet.account.address,
+  constraints: {
+    max_price_usdc: "0.20",
+    min_reliability_score: 0.50,
+    min_reputation_score: 0.50,
+    preferred_jurisdictions: ["US", "EU"],
+  },
 });
 
-if (verdict.verdict === "callable" && verdict.score >= 70) {
-  // Safe to spend
-  const recommended = verdict.call_plan;
-  // ... make the actual paid call to the target
+if (route.verdict === "callable") {
+  // route.recommendation.endpoint is the best x402 service to call
+  // route.receipt is an EIP-191 signed proof, valid for 60 seconds
+  // route.alternatives lists up to 3 ranked backups
+  console.log("Calling:", route.recommendation.endpoint);
+  // ... make the actual paid call to the recommended target
 } else {
-  console.warn("Skipping target:", verdict.warnings);
+  // verdict ∈ "no_match" / "all_filtered" / "all_unreliable"
+  // best_available_anyway shows the closest match if filters were too tight
+  console.warn("No clean match:", route.reason);
 }
 ```
 
-The same wallet calls Pulse, Pricing Index, and Reputation Score with one line each:
+If you want the raw signals instead of the composed answer, the four pillars are individually callable:
 
 ```ts
+const verdict    = await mako.verify({ target_url: "https://target.example/api/foo", intended_task: "...", max_price_usdc: 0.10 });
 const pulse      = await mako.pulse({ endpoint: "https://target.example/api/foo", window: "30d" });
 const pricing    = await mako.pricingIndex({ category: "trading_signals", window: "30d" });
 const reputation = await mako.reputation({ address: "0x...", window: "30d" });
@@ -80,7 +93,69 @@ const reputation = await mako.reputation({ address: "0x...", window: "30d" });
 
 For Python and MCP buyer agent examples, see [`examples/`](./examples).
 
-## The four pillars
+## MAKO Route — single-call routing (the lead product)
+
+`POST /api/route` — $0.05 USDC
+
+Route is the composition apex. A buyer agent submits a canonical task name (e.g. `crypto-data`, `search`, `governance-brief`, `endpoint-verification`) plus optional constraints (max price, minimum reliability/reputation thresholds, preferred jurisdictions, prohibited operators). MAKO scores every catalog candidate against Pulse + Pricing Index + Reputation Score signals, applies the hard filters, and returns:
+
+- the highest-scoring **recommendation** (endpoint + operator wallet + advertised price + reliability/reputation/fairness data)
+- up to 3 **ranked alternatives** for fallback
+- an **EIP-191 signed receipt** valid for 60 seconds, covering the recommendation under the buyer's exact constraints
+- the **decision payload** so anyone can re-hash and verify the signature trustlessly
+
+Composite score (default weights):
+
+```
+score = 0.40 × reliability + 0.30 × fairness + 0.20 × reputation + 0.10 × jurisdiction_bonus
+```
+
+Response shape:
+
+```json
+{
+  "verdict": "callable",
+  "task": "crypto-data",
+  "recommendation": {
+    "endpoint": "https://api.nansen.ai",
+    "operator_wallet": "0x93053f1e...",
+    "price_quoted_usdc": "0.10",
+    "endpoint_reliability_score": 0.97,
+    "operator_reputation_score": 0.94,
+    "fairness_note": "8% below category median ($0.11)",
+    "jurisdiction": "US",
+    "kya_status": "unknown",
+    "rank": 1
+  },
+  "alternatives": [
+    { "endpoint": "https://public.zapper.xyz", "rank": 2, ... }
+  ],
+  "candidates_evaluated": 4,
+  "candidates_passing_filters": 4,
+  "receipt": {
+    "checked_at": "2026-05-08T23:25:06Z",
+    "message_hash": "0x...",
+    "signature": "0x...",
+    "signer": "0x12BBC7Cde00eB800588243A0B3B4E8E802673BFf",
+    "signature_scheme": "eip191"
+  },
+  "decision_payload": { ... },
+  "request_id": "rt_...",
+  "issued_at": 1746719999,
+  "receipt_expires_unix": 1746720059,
+  "execution_result": null
+}
+```
+
+`verdict` ∈ `callable` / `no_match` / `all_filtered` / `all_unreliable`. The `no_match` case (task not in catalog) returns a 422 and is not charged. The filter-failure verdicts return 200 + `best_available_anyway` (the closest near-miss, even if filtered) so buyers see what was nearly viable.
+
+**v1 supports `execution_mode: "recommend"` only.** Execute and execute_with_fallback (where MAKO actually invokes the chosen service on the buyer's behalf) ship in v2.
+
+Catalog (v1, hand-curated from current Pulse population): 28 services across 13 task buckets — `endpoint-verification`, `pulse-score`, `pricing-data`, `reputation-data`, `governance-brief`, `proposal-signal`, `crypto-data`, `market-data`, `search`, `image-generation`, `ai-inference`, `data-extraction`, `agent-storage`. Catalog expansion in v2 will auto-ingest from agentic.market.
+
+Default reliability/reputation thresholds are intentionally relaxed (0.50) on launch because the verifier ledger is sparse. Routing volume densifies the ledger; the cold start IS the product.
+
+## The four underlying pillars
 
 ### Verifier — pre-spend trust check
 
@@ -231,7 +306,9 @@ See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the four-pillar diagram, data flo
 - **Facilitator:** Coinbase CDP (with `x402.org/facilitator` fallback)
 - **Listed on:** [agentic.market](https://agentic.market/?service=mako-pollinateresearch-com)
 - **Live discovery:** [`/.well-known/x402.json`](https://mako.pollinateresearch.com/.well-known/x402.json)
-- **Live Pulse scoreboard:** [`/pulse`](https://mako.pollinateresearch.com/pulse) — currently scoring 142 of 659 directory services
+- **Live Pulse scoreboard:** [`/pulse`](https://mako.pollinateresearch.com/pulse) — currently scoring 142+ of 659 directory services
+- **Route catalog:** 28 services across 13 task buckets, hand-curated from current Pulse population
+- **Receipt signer:** `0x12BBC7Cde00eB800588243A0B3B4E8E802673BFf` (EIP-191)
 - **Source:** this repo
 
 ## Self-host
