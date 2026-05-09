@@ -93,6 +93,33 @@ const reputation = await mako.reputation({ address: "0x...", window: "30d" });
 
 For Python and MCP buyer agent examples, see [`examples/`](./examples).
 
+## Use via MCP (Hermes Agent, OpenClaw, Claude Desktop, Cline)
+
+The fastest way to use MAKO inside an MCP-native agent runtime is the official MCP server, published as [`@pollinateresearch/mako-mcp`](https://www.npmjs.com/package/@pollinateresearch/mako-mcp) on npm. It exposes all five paid endpoints as MCP tools, handles the x402 payment flow end-to-end, and works with any MCP-compatible client.
+
+```bash
+npm install -g @pollinateresearch/mako-mcp
+```
+
+Add to your MCP client config (Claude Desktop example):
+
+```json
+{
+  "mcpServers": {
+    "mako": {
+      "command": "mako-mcp",
+      "env": {
+        "X402_BUYER_PRIVATE_KEY": "0x..."
+      }
+    }
+  }
+}
+```
+
+Five tools become available to the agent: `mako_route`, `mako_verify`, `mako_pulse`, `mako_pricing`, `mako_reputation`. Each call settles in real USDC on Base mainnet via Coinbase CDP, with EIP-191 signed receipts in the response.
+
+Source, integration recipes for Hermes Agent and OpenClaw, and full setup: [`github.com/ChrisDover/mako-mcp-server`](https://github.com/ChrisDover/mako-mcp-server).
+
 ## MAKO Route — single-call routing (the lead product)
 
 `POST /api/route` — $0.05 USDC
@@ -334,7 +361,7 @@ See [`CONTRIBUTING.md`](./CONTRIBUTING.md). Issues and PRs welcome — particula
 
 - Buyer-side agent integrations (LangChain, AutoGen, CrewAI, etc.)
 - Additional language SDKs (Python, Go, Rust)
-- MCP server wrappers exposing MAKO pillars as agent tools
+- Recipes pairing the [`@pollinateresearch/mako-mcp`](https://www.npmjs.com/package/@pollinateresearch/mako-mcp) MCP server with specific agent runtimes (Hermes Agent, OpenClaw, Cline, Cursor)
 - Worked examples for specific verticals (DEX trading, governance, compliance)
 
 ## Security
