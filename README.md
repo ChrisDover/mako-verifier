@@ -16,12 +16,25 @@ When a buyer agent is about to spend USDC against another x402 service, MAKO ret
 | Pulse | Has this endpoint been behaving? | $0.02 | GET | `/api/pulse/score` |
 | Pricing Index | Is this a fair price for this kind of work? | $0.02 | GET | `/api/pricing/index` |
 | Reputation Score | Is the operator behind this wallet trustworthy? | $0.03 | GET | `/api/reputation/wallet` |
+| Markets Aggregator | Top prediction markets across Polymarket + Kalshi + Limitless, normalized + signed | $0.05 | GET | `/api/markets/aggregate` |
 
 `POST /api/route` is the lead product: a single call that composes Verifier + Pulse + Pricing Index + Reputation Score, applies your constraints, and returns the best x402 service for the task plus an EIP-191 signed receipt. The four underlying pillars remain individually callable for any buyer agent that wants the raw signals.
 
-Every paid call writes to the same ledger. Pulse, Pricing Index, Reputation Score, and Route all read from it — so each surface gets sharper as the others get used. The flywheel is already turning: the live Pulse scoreboard at [`mako.pollinateresearch.com/pulse`](https://mako.pollinateresearch.com/pulse) currently scores 142+ services across the agentic.market directory, and the Route catalog spans 28 services across 13 task buckets.
+Every paid call writes to the same ledger. Pulse, Pricing Index, Reputation Score, and Route all read from it — so each surface gets sharper as the others get used. The flywheel is already turning: the live Pulse scoreboard at [`mako.pollinateresearch.com/pulse`](https://mako.pollinateresearch.com/pulse) currently scores 248+ services across the agentic.market directory (700+ total in the directory), and the Route catalog spans 28 services across 13 task buckets.
 
 This repo is the open client SDK and protocol spec. The reference deployment runs on Base mainnet at `mako.pollinateresearch.com` — both this SDK and your own buyer agents call it the same way.
+
+## Integrations
+
+**AsterPay** — live as of 2026-05-13. MAKO Pulse surfaces as `extensions.reliability` per route in AsterPay's x402 facilitator response, signed by `0x12BBC7Cde00eB800588243A0B3B4E8E802673BFf` with EIP-191 over RFC 8785 canonical JSON. Buyer agents calling AsterPay-fronted x402 services pay a chained `$0.02` Pulse fee per Pulse-attached call; AsterPay's facilitator splits and forwards our share. The partnership is publicly listed in their signer registry:
+
+```
+https://asterpay.io/.well-known/reconciliation-signers.json
+```
+
+Same canonical envelope shape works both directions — MAKO → AsterPay for reliability reads, AsterPay → MAKO for daily reconciliation webhook payloads. See [`docs/asterpay-integration.md`](./docs/asterpay-integration.md) for the wire-format and verifier pseudocode.
+
+The integration shape — `extensions.reliability` per route with a chained settlement fee block — generalizes to any x402 facilitator. We're applying the same pattern to additional facilitator and prediction-market partners.
 
 ## Why this exists
 
@@ -95,7 +108,7 @@ For Python and MCP buyer agent examples, see [`examples/`](./examples).
 
 ## Use via MCP (Hermes Agent, OpenClaw, Claude Desktop, Cline)
 
-The fastest way to use MAKO inside an MCP-native agent runtime is the official MCP server, published as [`@pollinateresearch/mako-mcp`](https://www.npmjs.com/package/@pollinateresearch/mako-mcp) on npm. It exposes all five paid endpoints as MCP tools, handles the x402 payment flow end-to-end, and works with any MCP-compatible client.
+The fastest way to use MAKO inside an MCP-native agent runtime is the official MCP server, published as [`@pollinateresearch/mako-mcp`](https://www.npmjs.com/package/@pollinateresearch/mako-mcp) on npm. It exposes all six paid endpoints as MCP tools (`mako_route`, `mako_verify`, `mako_pulse`, `mako_pricing`, `mako_reputation`, `mako_markets_aggregate`), handles the x402 payment flow end-to-end, and works with any MCP-compatible client.
 
 ```bash
 npm install -g @pollinateresearch/mako-mcp
@@ -333,7 +346,7 @@ See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the four-pillar diagram, data flo
 - **Facilitator:** Coinbase CDP (with `x402.org/facilitator` fallback)
 - **Listed on:** [agentic.market](https://agentic.market/?service=mako-pollinateresearch-com)
 - **Live discovery:** [`/.well-known/x402.json`](https://mako.pollinateresearch.com/.well-known/x402.json)
-- **Live Pulse scoreboard:** [`/pulse`](https://mako.pollinateresearch.com/pulse) — currently scoring 142+ of 659 directory services
+- **Live Pulse scoreboard:** [`/pulse`](https://mako.pollinateresearch.com/pulse) — currently scoring 248+ of 700+ directory services
 - **Route catalog:** 28 services across 13 task buckets, hand-curated from current Pulse population
 - **Receipt signer:** `0x12BBC7Cde00eB800588243A0B3B4E8E802673BFf` (EIP-191)
 - **Source:** this repo
